@@ -188,5 +188,7 @@ class AWRAgent:
         return max([abs(tr.reward) for tr in trajectories])
 
     @staticmethod
-    def test(models, environment, hyper_ps, debug_type):
-        return t([0.])  # TODO
+    def test(models, environment, debug_type):
+        actor, _ = models
+        samples = AWRAgent.sample_from_env(actor, environment, debug_type, exploration=False)
+        return samples[-1].reward_as_tensor()

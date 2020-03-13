@@ -69,7 +69,7 @@ class Training:
         print("testing")
         rewards = t([])
         for _ in range(test_iterations):  # expected reward estimated with average
-            rews = t(agent.test(models, environment, hyper_ps, debug_type))
+            rews = agent.test(models, environment, debug_type)
             rews = rews.unsqueeze(0)
             rewards = torch.cat((rewards, rews))
         rewards = rewards.mean(0)

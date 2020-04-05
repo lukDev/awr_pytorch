@@ -44,8 +44,9 @@ class Training:
         # creating the tensorboardX writer
         writer = SummaryWriter(dir_path + 'tensorboard/')
 
-        # setting the number of test iterations used for each instance to estimate the expected return
-        test_iterations = 1
+        if 'test_iterations' not in hyper_ps:
+            hyper_ps['test_iterations'] = 100
+        test_iterations = hyper_ps['test_iterations']
 
         # extend the hyper-parameters to include environment information
         hyper_ps['state_dim'] = environment.observation_space.shape[0]

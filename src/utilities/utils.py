@@ -111,3 +111,21 @@ def nan_in_model(model):
             return True
 
     return False
+
+
+def dict_with_default(dict, key, default):
+    """
+    Returns the value contained in the given dictionary for the given key, if it exists.
+    Otherwise, returns the given default value.
+
+    :param dict: The dictionary from which the value should be read.
+    :param key: The key to look for in the dictionary.
+    :param default: The fallback value, in case the dictionary doesn't contain the desired key.
+
+    :return: The value read from the dictionary, if it exists. The default value otherwise.
+    """
+
+    if key in dict:
+        return dict[key]
+    else:
+        return default

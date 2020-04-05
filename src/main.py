@@ -9,10 +9,11 @@ from utilities.training import Training
 
 # setting the hyper-parameters
 hyper_ps = {
-    'replay_size': 20000,
-    'max_epochs': 1000,
-    'beta': 0.05,
+    'replay_size': 50000,
+    'max_epochs': 100,
+    'beta': 0.125,
     'max_advantage_weight': 50.,
+    'min_log_pi': -50.,
     'discount_factor': .9,
     'c_hidden_size': 128,
     'c_hidden_layers': 1,
@@ -23,12 +24,16 @@ hyper_ps = {
     'a_learning_rate': 5e-5,
     'a_momentum': .9,
     'critic_threshold': 1.,
-    'critic_suffices_required': 5,
-    'critic_steps': 200,
-    'actor_steps': 500,
+    'critic_suffices_required': 1,
+    'critic_steps': 70,
+    'actor_steps': 150,
     'batch_size': 256,
     'seed': 123456,
     'lambda': .95,
+    'replay_fill_threshold': 1.,
+    'random_exploration': True,
+    'return_norm': 50.,
+    'test_iterations': 50,
 }
 
 # configuring the environment

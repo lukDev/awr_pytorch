@@ -217,5 +217,5 @@ class AWRAgent:
     @staticmethod
     def test(models, environment, debug_type):
         actor, _ = models
-        samples = AWRAgent.sample_from_env(actor, environment, debug_type, exploration=False)
+        samples = AWRAgent.sample_from_env(actor, environment, debug_type is not DebugType.NONE, exploration=False)
         return samples[-1].reward_as_tensor()

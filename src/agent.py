@@ -26,12 +26,13 @@ class AWRAgent:
         epoch = 0
         pre_training_epochs = 0
         max_pre_epochs = 150
-        validation_epoch_mod = 20
 
         # algorithm specifics
         beta = hyper_ps['beta']
-        actor_steps = hyper_ps['actor_steps']
-        critic_steps = hyper_ps['critic_steps']
+        critic_steps_start = hyper_ps['critic_steps_start']
+        critic_steps_end = hyper_ps['critic_steps_end']
+        actor_steps_start = hyper_ps['actor_steps_start']
+        actor_steps_end = hyper_ps['actor_steps_end']
         batch_size = hyper_ps['batch_size']
         max_advantage_weight = hyper_ps['max_advantage_weight']
         min_log_pi = hyper_ps['min_log_pi']
@@ -48,18 +49,27 @@ class AWRAgent:
         # return normalization
         return_norm = dict_with_default(hyper_ps, 'return_norm', 1.)
 
+        # evaluation
+        validation_epoch_mod = dict_with_default(hyper_ps, 'validation_epoch_mod', 30)
+        test_iterations = hyper_ps['test_iterations']
+
         AWRAgent.compute_validation_return(
             actor,
             environment,
             hyper_ps,
-            debug_full,
-            hyper_ps['test_iterations'],
+            debug_type,
+            test_iterations,
             epoch,
             writer
         )
 
         while epoch < max_epoch_count + pre_training_epochs:
             print(f"\nEpoch: {epoch}")
+
+            # set actor and critic update steps
+            epoch_percentage = ((epoch - pre_training_epochs) / max_epoch_count)
+            critic_steps = critic_steps_start + int((critic_steps_end - critic_steps_start) * epoch_percentage)
+            actor_steps = actor_steps_start + int((actor_steps_end - actor_steps_start) * epoch_percentage)
 
             # sampling from env
             samples = AWRAgent.sample_from_env(
@@ -74,25 +84,14 @@ class AWRAgent:
                         samples) - max_buffer_size:]  # delete just enough from the replay buffer to fit the new data in
                 else:
                     replay_buffer = []
-            td_trajs = td_trajectories(samples, critic, hyper_ps)
-            replay_buffer.extend(td_trajs)
-
-            if critic_suffices and (epoch + 1) % validation_epoch_mod == 0:
-                AWRAgent.compute_validation_return(
-                    actor,
-                    environment,
-                    hyper_ps,
-                    debug_full,
-                    validation_epoch_mod,
-                    epoch,
-                    writer
-                )
+            replay_buffer.extend(samples)
 
             if len(replay_buffer) >= replay_fill_threshold * max_buffer_size:
                 # training the critic
                 avg_loss = 0.
                 for _ in range(critic_steps):
-                    trajectories = random.choices(replay_buffer, k=batch_size)
+                    samples = random.choices(replay_buffer, k=batch_size)
+                    trajectories = td_trajectories(samples, critic, hyper_ps)
                     ins = critic_inputs(trajectories).to(device)
                     tars = torch.cat([tr.reward_as_tensor().unsqueeze(0) for tr in trajectories]) / return_norm
 
@@ -121,14 +120,19 @@ class AWRAgent:
             if critic_suffices:
                 # training the actor
                 avg_loss = 0.
-                for _ in range(actor_steps):
-                    trajectories = random.choices(replay_buffer, k=batch_size)
+                for temp in range(actor_steps):
+                    samples = random.choices(replay_buffer, k=batch_size)
+                    trajectories = td_trajectories(samples, critic, hyper_ps)
+
                     rets = t([tr.reward / return_norm for tr in trajectories], device=device)
 
                     ins = critic_inputs(trajectories)
                     state_values = critic.evaluate(ins).clone().detach().to(device).squeeze(1)
 
                     advantage_weights = torch.exp((1. / beta) * (rets - state_values)).requires_grad_(False)
+                    # positive_advs = [ad > 40. for ad in advantage_weights.tolist()]
+                    # if any(positive_advs):
+                    #     print("success")
                     advantage_weights = torch.clamp(advantage_weights, max=max_advantage_weight)
 
                     actor_ins = torch.cat([tr.state.unsqueeze(0) for tr in trajectories]).to(device)
@@ -160,20 +164,31 @@ class AWRAgent:
 
             epoch += 1
 
+            if critic_suffices and epoch % validation_epoch_mod == 0:
+                AWRAgent.compute_validation_return(
+                    actor,
+                    environment,
+                    hyper_ps,
+                    debug_type,
+                    test_iterations,
+                    epoch,
+                    writer
+                )
+
         return actor, critic
 
     @staticmethod
-    def compute_validation_return(actor, env, hyper_ps, debug_full, iterations, epoch, writer):
+    def compute_validation_return(actor, env, hyper_ps, debug_type, iterations, epoch, writer):
         print("computing average return")
-        sample_return = AWRAgent.validation_return(actor, env, hyper_ps, debug_full, iterations)
+        sample_return = AWRAgent.validation_return(actor, env, hyper_ps, debug_type, iterations)
         writer.add_scalar('return', sample_return, epoch)
         print(f"return: {sample_return}")
 
     @staticmethod
-    def validation_return(actor, env, hyper_ps, debug_full, iterations):
+    def validation_return(actor, env, hyper_ps, debug_type, iterations):
         sample_return = 0.
         for _ in range(iterations):
-            samples = AWRAgent.sample_from_env(actor, env, debug_full, exploration=False)
+            samples = AWRAgent.sample_from_env(actor, env, debug_type != DebugType.NONE, exploration=False)
             mc_trajs = mc_trajectories(samples, hyper_ps)
             sample_return += torch.mean(t([tr.reward for tr in mc_trajs]))
 
@@ -183,15 +198,13 @@ class AWRAgent:
     @staticmethod
     def sample_from_env(actor_model, env, debug, exploration):
         samples = []
-        state = env.reset()
+        state = t(env.reset()).float()
         done = False
 
         if debug:
             env.render()
 
         while not done:
-            state = t(state.copy(), requires_grad=True, device=device).float()
-
             if exploration:
                 action = t(env.action_space.sample())
             else:
@@ -200,7 +213,7 @@ class AWRAgent:
 
             reward = res[1]
             old_state = state.clone().detach()
-            state = res[0]
+            state = t(res[0]).float()
             samples.append(Sample(
                 state=old_state,
                 action=action,
@@ -215,7 +228,6 @@ class AWRAgent:
         return samples
 
     @staticmethod
-    def test(models, environment, debug_type):
+    def test(models, environment, hyper_ps, debug_type):
         actor, _ = models
-        samples = AWRAgent.sample_from_env(actor, environment, debug_type is not DebugType.NONE, exploration=False)
-        return samples[-1].reward_as_tensor()
+        return AWRAgent.validation_return(actor, environment, hyper_ps, debug_type is not DebugType.NONE, 1)

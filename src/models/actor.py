@@ -22,7 +22,7 @@ class Actor(Model):
         hidden_layers = hyper_ps['a_hidden_layers']
         action_dim = hyper_ps['action_dim']
 
-        fcs = [nn.Linear(hyper_ps['state_dim'], hidden_size)]
+        fcs = [nn.Linear(hyper_ps['state_dim'], hidden_size), nn.ReLU()]
         for _ in range(hidden_layers):
             fcs.append(nn.Linear(hidden_size, hidden_size))
             fcs.append(nn.ReLU())

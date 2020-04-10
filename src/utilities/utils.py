@@ -1,6 +1,6 @@
-import torch
+import copy
 
-from sample import Sample
+import torch
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -15,8 +15,8 @@ def mc_trajectories(samples, hyper_ps):
     Gives a list of trajectories for a given list of samples from an RL environment.
     The MC estimator is used for this computation.
     All non-final rewards are discounted according to the strategy specified in the given hyper-parameters.
-    A sample consists of state, noise/action distr., action, reward, remaining time.
-    A trajectory consists of state, noise/action distr., action, return, remaining time.
+    A sample consists of state, action distr., action, REWARD, remaining time.
+    A trajectory consists of state, action distr., action, RETURN, remaining time.
 
     :param samples: The samples to be used to compute their corresponding trajectories.
     :param hyper_ps: The hyper-parameters to be used.
@@ -28,16 +28,14 @@ def mc_trajectories(samples, hyper_ps):
 
     discount_factor = hyper_ps['discount_factor']
     for i, sample in enumerate(samples):
-        ret = 0.
+        ret = sample.reward
         gamma = 1.
 
         for j in range(i + 1, len(samples)):
             gamma *= discount_factor
             ret += gamma * samples[j].reward
 
-        new_sample = Sample.from_sample(sample)
-        new_sample.reward = ret
-        trajectories.append(new_sample)
+        trajectories.append(copy.deepcopy(sample).with_reward_(ret))
 
     return trajectories
 
@@ -45,10 +43,9 @@ def mc_trajectories(samples, hyper_ps):
 def td_trajectories(samples, critic, hyper_ps):
     """
     Gives a list of trajectories for a given list of samples from an RL environment.
-    The TD(λ) estimator is used for this computation. λ is given in the hyper-parameters.
-    All non-final rewards are discounted according to the strategy specified in the given hyper-parameters.
-    A sample consists of state, noise/action distr., action, reward, remaining time.
-    A trajectory consists of state, noise/action distr., action, return, remaining time.
+    The TD(0) estimator is used for this computation.
+    A sample consists of state, action distribution, action, reward, remaining time.
+    A trajectory consists of state, action distribution, action, return, remaining time.
 
     :param samples: The samples to be used to compute their corresponding trajectories.
     :param epoch: The epoch the agent is currently in.
@@ -59,41 +56,32 @@ def td_trajectories(samples, critic, hyper_ps):
     """
 
     trajectories = []
-    mc_trajs = mc_trajectories(samples, hyper_ps)
+    state_values = critic.evaluate(critic_inputs(samples, next_states=False))
+    next_state_values = critic.evaluate(critic_inputs(samples, next_states=True))
 
-    next_state_values = [critic.evaluate(critic_inputs([s])) for s in samples]
+    discount_factor = dict_with_default(hyper_ps, 'discount_factor', .9)
+    alpha = dict_with_default(hyper_ps, 'alpha', .95)
 
-    max_t = len(samples)
-    lam = 0.95 if 'lambda' not in hyper_ps else hyper_ps['lambda']
-    discount_factor = hyper_ps['discount_factor']
+    for i, sample in enumerate(samples):
+        state_value = state_values[i]
+        ret = state_value + alpha * (sample.reward + discount_factor * next_state_values[i] - state_value)
 
-    for t, sample in enumerate(samples):
-        ret = 0.
-
-        running_sum = 0.
-        gamma = 1.
-        for n in range(1, max_t - t):
-            gamma *= discount_factor
-            running_sum += gamma * samples[t+n].reward
-            ret += lam**(n-1) * (running_sum + next_state_values[t+n])
-
-        ret *= 1. - lam
-        ret += lam**(max_t - t - 1) * mc_trajs[t].reward
-
-        trajectories.append(Sample.from_sample(sample).with_reward_(ret))
+        trajectories.append(copy.deepcopy(sample).with_reward_(ret))
 
     return trajectories
 
 
-def critic_inputs(trajectories):
+def critic_inputs(trajectories, next_states=False):
     """
     Extracts the relevant inputs for the V-critic from the given list of trajectories.
 
     :param trajectories: The trajectories from which the information should be taken.
+    :param next_states: Extract the next-state entries from the samples instead of the current states.
+
     :return: The extracted information in the form of a batched tensor.
     """
 
-    return torch.cat([tr.state.flatten().unsqueeze(0) for tr in trajectories]).to(device)
+    return torch.cat([(tr.next_state if next_states else tr.state).flatten().unsqueeze(0) for tr in trajectories]).to(device)
 
 
 def nan_in_model(model):

@@ -2,7 +2,7 @@ import torch
 from torch import nn, distributions
 
 from models.model import Model
-from utilities.utils import t
+from utilities.utils import t, kaiming_init
 
 
 class Actor(Model):

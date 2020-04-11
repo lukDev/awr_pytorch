@@ -6,7 +6,7 @@ import os
 from tensorboardX import SummaryWriter
 
 from utilities.debug import DebugType
-from utilities.utils import device, t, nan_in_model
+from utilities.utils import device, t, nan_in_model, xavier_init
 
 
 class Training:
@@ -52,8 +52,11 @@ class Training:
         hyper_ps['state_dim'] = environment.observation_space.shape[0]
         hyper_ps['action_dim'] = environment.action_space.shape[0]
 
+        # passing the hyper-parameters to the models
         for m in models:
             m.set_params(hyper_ps)
+            init_func = type(m).init_func
+            m.apply(xavier_init if init_func is None else init_func)
 
         # converting the models to the current device
         models = [m.to(device) for m in models]

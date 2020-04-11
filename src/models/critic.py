@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from models.model import Model
-from utilities.utils import device
+from utilities.utils import device, xavier_init
 
 
 class Critic(Model):

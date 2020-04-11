@@ -212,15 +212,16 @@ class AWRAgent:
             res = env.step(action.cpu().numpy())
 
             reward = res[1]
+            done = res[2]
             old_state = state.clone().detach()
             state = t(res[0]).float()
             samples.append(Sample(
                 state=old_state,
                 action=action,
                 reward=reward,
+                done=done,
                 next_state=state,
             ))
-            done = res[2]
 
             if debug:
                 env.render()

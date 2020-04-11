@@ -64,7 +64,8 @@ def td_trajectories(samples, critic, hyper_ps):
 
     for i, sample in enumerate(samples):
         state_value = state_values[i]
-        ret = state_value + alpha * (sample.reward + discount_factor * next_state_values[i] - state_value)
+        next_value = 0. if sample.done else next_state_values[i]
+        ret = state_value + alpha * (sample.reward + discount_factor * next_value - state_value)
 
         trajectories.append(copy.deepcopy(sample).with_reward_(ret))
 
@@ -117,3 +118,27 @@ def dict_with_default(dict, key, default):
         return dict[key]
     else:
         return default
+
+
+def xavier_init(m):
+    """
+    Xavier normal initialisation for layer m.
+
+    :param m: The layer to have its weight and bias initialised.
+    """
+
+    if isinstance(m, torch.nn.Linear):
+        torch.nn.init.xavier_normal_(m.weight)
+        torch.nn.init.zeros_(m.bias)
+
+
+def kaiming_init(m):
+    """
+    Kaiming normal initialisation for layer m.
+
+    :param m: The layer to have its weight and bias initialised.
+    """
+
+    if isinstance(m, torch.nn.Linear):
+        torch.nn.init.kaiming_normal_(m.weight)
+        torch.nn.init.zeros_(m.bias)

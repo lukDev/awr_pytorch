@@ -1,10 +1,10 @@
 class Sample:
-    def __init__(self, state=None, action=None, reward=None, next_state=None, log_pi=None, remaining_time=None):
+    def __init__(self, state=None, action=None, reward=None, next_state=None, done=False, remaining_time=None):
         self.state = state
         self.action = action
         self.reward = reward
         self.next_state = next_state
-        self.log_pi = log_pi
+        self.done = done
         self.remaining_time = remaining_time
 
     def with_reward_(self, reward):

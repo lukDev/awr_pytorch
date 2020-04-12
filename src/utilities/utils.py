@@ -1,5 +1,6 @@
 import copy
 
+import numpy as np
 import torch
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -40,7 +41,7 @@ def mc_trajectories(samples, hyper_ps):
     return trajectories
 
 
-def td_trajectories(samples, critic, hyper_ps):
+def td_values(replay_buffers, state_values, hyper_ps):
     """
     Gives a list of trajectories for a given list of samples from an RL environment.
     The TD(0) estimator is used for this computation.
@@ -55,21 +56,20 @@ def td_trajectories(samples, critic, hyper_ps):
     :return: The trajectories.
     """
 
-    trajectories = []
-    state_values = critic.evaluate(critic_inputs(samples, next_states=False))
-    next_state_values = critic.evaluate(critic_inputs(samples, next_states=True))
+    states, rewards, dones = replay_buffers
+    tds = np.zeros(shape=(len(states),))
 
     discount_factor = dict_with_default(hyper_ps, 'discount_factor', .9)
     alpha = dict_with_default(hyper_ps, 'alpha', .95)
 
-    for i, sample in enumerate(samples):
+    for i, state in enumerate(states):
         state_value = state_values[i]
-        next_value = 0. if sample.done else next_state_values[i]
-        ret = state_value + alpha * (sample.reward + discount_factor * next_value - state_value)
+        next_value = 0. if dones[i] else state_values[i + 1]
+        ret = state_value + alpha * (rewards[i] + discount_factor * next_value - state_value)
 
-        trajectories.append(copy.deepcopy(sample).with_reward_(ret))
+        tds[i] = ret
 
-    return trajectories
+    return tds
 
 
 def critic_inputs(trajectories, next_states=False):

@@ -11,6 +11,7 @@ from utilities.training import Training
 hyper_ps = {
     'replay_size': 50000,
     'max_epochs': 150,
+    'sample_mod': 10,
     'beta': .05,
     'max_advantage_weight': 50.,
     'min_log_pi': -50.,
@@ -25,14 +26,14 @@ hyper_ps = {
     'a_learning_rate': 5e-5,
     'a_momentum': .9,
     'critic_threshold': .09,
-    'critic_suffices_required': 1,
+    'critic_suffices_required': 0,
     'critic_steps_start': 200,
     'critic_steps_end': 200,
     'actor_steps_start': 1000,
     'actor_steps_end': 1000,
     'batch_size': 256,
     'seed': 123456,
-    'replay_fill_threshold': 1.,
+    'replay_fill_threshold': 0.,
     'random_exploration': True,
     'return_norm': 2.,
     'test_iterations': 15,
@@ -41,7 +42,7 @@ hyper_ps = {
 
 # configuring the environment
 environment = gym.make('Pendulum-v0')
-environment._max_episode_steps = 600
+# environment._max_episode_steps = 600
 
 # setting up the training components
 agent = AWRAgent

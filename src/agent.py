@@ -1,9 +1,12 @@
 import random
-import torch
+from collections import deque
 
-from sample import Sample
+import torch
+import numpy as np
+
 from utilities.debug import DebugType
-from utilities.utils import t, device, td_trajectories, critic_inputs, mc_trajectories, nan_in_model, dict_with_default
+from utilities.utils import t, device, critic_inputs, mc_trajectories, nan_in_model, dict_with_default, \
+    td_values
 
 
 class AWRAgent:
@@ -16,8 +19,12 @@ class AWRAgent:
         actor, critic = models
 
         # replay buffer
-        replay_buffer = []
+        sample_mod = dict_with_default(hyper_ps, 'sample_mod', 10)
         max_buffer_size = hyper_ps['replay_size']
+        states = deque(maxlen=max_buffer_size)
+        actions = deque(maxlen=max_buffer_size)
+        rewards = deque(maxlen=max_buffer_size)
+        dones = deque(maxlen=max_buffer_size)
         replay_fill_threshold = dict_with_default(hyper_ps, 'replay_fill_threshold', 0.)
         random_exploration = dict_with_default(hyper_ps, 'random_exploration', False)
 
@@ -53,15 +60,15 @@ class AWRAgent:
         validation_epoch_mod = dict_with_default(hyper_ps, 'validation_epoch_mod', 30)
         test_iterations = hyper_ps['test_iterations']
 
-        AWRAgent.compute_validation_return(
-            actor,
-            environment,
-            hyper_ps,
-            debug_type,
-            test_iterations,
-            epoch,
-            writer
-        )
+        # AWRAgent.compute_validation_return(
+        #     actor,
+        #     environment,
+        #     hyper_ps,
+        #     debug_type,
+        #     test_iterations,
+        #     epoch,
+        #     writer
+        # )
 
         while epoch < max_epoch_count + pre_training_epochs:
             print(f"\nEpoch: {epoch}")
@@ -72,28 +79,30 @@ class AWRAgent:
             actor_steps = actor_steps_start + int((actor_steps_end - actor_steps_start) * epoch_percentage)
 
             # sampling from env
-            samples = AWRAgent.sample_from_env(
-                actor,
-                environment,
-                debug_full,
-                exploration=random_exploration and len(replay_buffer) < replay_fill_threshold * max_buffer_size
-            )
-            if len(replay_buffer) + len(samples) > max_buffer_size:
-                if len(samples) <= max_buffer_size:
-                    replay_buffer = replay_buffer[len(replay_buffer) + len(
-                        samples) - max_buffer_size:]  # delete just enough from the replay buffer to fit the new data in
-                else:
-                    replay_buffer = []
-            replay_buffer.extend(samples)
+            for _ in range(sample_mod):
+                AWRAgent.sample_from_env(
+                    actor,
+                    environment,
+                    debug_full,
+                    exploration=random_exploration and len(states) < replay_fill_threshold * max_buffer_size,
+                    replay_buffers=(states, actions, rewards, dones)
+                )
 
-            if len(replay_buffer) >= replay_fill_threshold * max_buffer_size:
+            dq_states = states
+            states = np.array(states)
+            dq_actions = actions
+            actions = np.array(actions)
+            dq_rewards = rewards
+            rewards = np.array(rewards)
+
+            if len(states) >= replay_fill_threshold * max_buffer_size:
                 # training the critic
                 avg_loss = 0.
+                tds = td_values((states, rewards, dones), critic, hyper_ps)
                 for _ in range(critic_steps):
-                    samples = random.choices(replay_buffer, k=batch_size)
-                    trajectories = td_trajectories(samples, critic, hyper_ps)
-                    ins = critic_inputs(trajectories).to(device)
-                    tars = torch.cat([tr.reward_as_tensor().unsqueeze(0) for tr in trajectories]) / return_norm
+                    indices = random.sample(range(len(states)), batch_size)
+                    ins = t(states[indices])
+                    tars = t(tds[indices]) / return_norm
 
                     outs = critic(ins)
                     loss = critic.backward(outs, tars)
@@ -120,25 +129,17 @@ class AWRAgent:
             if critic_suffices:
                 # training the actor
                 avg_loss = 0.
-                for temp in range(actor_steps):
-                    samples = random.choices(replay_buffer, k=batch_size)
-                    trajectories = td_trajectories(samples, critic, hyper_ps)
+                state_values = np.array(critic.evaluate(t(states)).squeeze(1).cpu())
+                returns = td_values((states, rewards, dones), state_values, hyper_ps) / return_norm
+                advantages = returns - state_values
+                for _ in range(actor_steps):
+                    indices = random.sample(range(len(states)), batch_size)
 
-                    rets = t([tr.reward / return_norm for tr in trajectories], device=device)
+                    advantage_weights = np.exp(advantages[indices] / beta)
+                    advantage_weights = t(np.minimum(advantage_weights, max_advantage_weight))
 
-                    ins = critic_inputs(trajectories)
-                    state_values = critic.evaluate(ins).clone().detach().to(device).squeeze(1)
-
-                    advantage_weights = torch.exp((1. / beta) * (rets - state_values)).requires_grad_(False)
-                    # positive_advs = [ad > 40. for ad in advantage_weights.tolist()]
-                    # if any(positive_advs):
-                    #     print("success")
-                    advantage_weights = torch.clamp(advantage_weights, max=max_advantage_weight)
-
-                    actor_ins = torch.cat([tr.state.unsqueeze(0) for tr in trajectories]).to(device)
-                    normal, _ = actor(actor_ins)
-                    actions = torch.cat([tr.action.unsqueeze(0) for tr in trajectories]).to(device)
-                    log_pis = normal.log_prob(actions)
+                    normal, _ = actor(t(states[indices]))
+                    log_pis = normal.log_prob(t(actions[indices]))
                     log_pis = torch.sum(log_pis, dim=1)
                     log_pis = torch.clamp(log_pis, min=min_log_pi)
 
@@ -148,7 +149,7 @@ class AWRAgent:
 
                     mean_loss = torch.sum(losses)
                     avg_loss += mean_loss
-                avg_loss /= len(replay_buffer)
+                avg_loss /= actor_steps
                 print(f"average actor loss: {avg_loss}")
 
                 if nan_in_model(actor):
@@ -163,6 +164,10 @@ class AWRAgent:
                     break
 
             epoch += 1
+
+            states = dq_states
+            actions = dq_actions
+            rewards = dq_rewards
 
             if critic_suffices and epoch % validation_epoch_mod == 0:
                 AWRAgent.compute_validation_return(
@@ -196,8 +201,8 @@ class AWRAgent:
         return sample_return
 
     @staticmethod
-    def sample_from_env(actor_model, env, debug, exploration):
-        samples = []
+    def sample_from_env(actor_model, env, debug, exploration, replay_buffers):
+        states, actions, rewards, dones = replay_buffers
         state = t(env.reset()).float()
         done = False
 
@@ -213,20 +218,15 @@ class AWRAgent:
 
             reward = res[1]
             done = res[2]
-            old_state = state.clone().detach()
+            states.append(np.array(state.cpu()))
+            actions.append(np.array(action.cpu()))
+            rewards.append(reward)
+            dones.append(done)
+
             state = t(res[0]).float()
-            samples.append(Sample(
-                state=old_state,
-                action=action,
-                reward=reward,
-                done=done,
-                next_state=state,
-            ))
 
             if debug:
                 env.render()
-
-        return samples
 
     @staticmethod
     def test(models, environment, hyper_ps, debug_type):

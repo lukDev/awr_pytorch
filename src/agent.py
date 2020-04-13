@@ -57,15 +57,15 @@ class AWRAgent:
         validation_epoch_mod = dict_with_default(hyper_ps, 'validation_epoch_mod', 30)
         test_iterations = hyper_ps['test_iterations']
 
-        # AWRAgent.compute_validation_return(
-        #     actor,
-        #     environment,
-        #     hyper_ps,
-        #     debug_type,
-        #     test_iterations,
-        #     epoch,
-        #     writer
-        # )
+        AWRAgent.compute_validation_return(
+            actor,
+            environment,
+            hyper_ps,
+            debug_type,
+            test_iterations,
+            epoch,
+            writer
+        )
 
         while epoch < max_epoch_count + pre_training_epochs:
             print(f"\nEpoch: {epoch}")

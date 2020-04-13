@@ -43,8 +43,7 @@ class Critic(Model):
         return self.fc(state)
 
     def backward(self, out, target):
-        target = target.type(torch.FloatTensor).to(device)
-        loss = self.criterion(out, target)
+        loss = self.criterion(out, target.float())
 
         self.optimiser.zero_grad()
         loss.backward()

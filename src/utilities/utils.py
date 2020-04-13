@@ -57,17 +57,22 @@ def td_values(replay_buffers, state_values, hyper_ps):
     """
 
     states, rewards, dones = replay_buffers
-    tds = np.zeros(shape=(len(states),))
+    sample_count = len(states)
+    tds = np.zeros(shape=(sample_count,))
 
     discount_factor = dict_with_default(hyper_ps, 'discount_factor', .9)
     alpha = dict_with_default(hyper_ps, 'alpha', .95)
+    lam = dict_with_default(hyper_ps, 'lambda', .95)
 
-    for i, state in enumerate(states):
+    val = 0.
+    for i in range(sample_count - 1, -1, -1):
         state_value = state_values[i]
         next_value = 0. if dones[i] else state_values[i + 1]
-        ret = state_value + alpha * (rewards[i] + discount_factor * next_value - state_value)
 
-        tds[i] = ret
+        error = rewards[i] + discount_factor * next_value - state_value
+        val = alpha * error + discount_factor * lam * (1 - dones[i]) * val
+
+        tds[i] = val + state_value
 
     return tds
 

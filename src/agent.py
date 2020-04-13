@@ -53,9 +53,6 @@ class AWRAgent:
         critic_suffices_count = 0
         critic_suffices = False
 
-        # return normalization
-        return_norm = dict_with_default(hyper_ps, 'return_norm', 1.)
-
         # evaluation
         validation_epoch_mod = dict_with_default(hyper_ps, 'validation_epoch_mod', 30)
         test_iterations = hyper_ps['test_iterations']
@@ -105,7 +102,7 @@ class AWRAgent:
             for _ in range(critic_steps):
                 indices = random.sample(range(len(states)), batch_size)
                 ins = t(states[indices])
-                tars = t(tds[indices]) / return_norm
+                tars = t(tds[indices])
 
                 outs = critic(ins)
                 loss = critic.backward(outs.squeeze(1), tars)
@@ -131,7 +128,7 @@ class AWRAgent:
                 # training the actor
                 avg_loss = 0.
                 state_values = np.array(critic.evaluate(t(states)).squeeze(1).cpu())
-                returns = td_values((states, rewards, dones), state_values, hyper_ps) / return_norm
+                returns = td_values((states, rewards, dones), state_values, hyper_ps)
                 advantages = returns - state_values
                 for _ in range(actor_steps):
                     indices = random.sample(range(len(states)), batch_size)

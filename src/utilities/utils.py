@@ -13,20 +13,17 @@ def t(v, dtype=None, device=device, requires_grad=False):
 
 def mc_values(rewards, hyper_ps):
     """
-    Gives a list of trajectories for a given list of samples from an RL environment.
+    Gives a list of MC estimates for a given list of samples from an RL environment.
     The MC estimator is used for this computation.
-    All non-final rewards are discounted according to the strategy specified in the given hyper-parameters.
-    A sample consists of state, action distr., action, REWARD, remaining time.
-    A trajectory consists of state, action distr., action, RETURN, remaining time.
 
-    :param samples: The samples to be used to compute their corresponding trajectories.
+    :param rewards: The rewards that were obtained while exploring the RL environment.
     :param hyper_ps: The hyper-parameters to be used.
 
-    :return: The trajectories.
+    :return: The MC estimates.
     """
 
     mcs = np.zeros(shape=(len(rewards),))
-    discount_factor = hyper_ps['discount_factor']
+    discount_factor = dict_with_default(hyper_ps, 'discount_factor', .9)
 
     for i, reward in enumerate(rewards):
         ret = reward
@@ -43,17 +40,15 @@ def mc_values(rewards, hyper_ps):
 
 def td_values(replay_buffers, state_values, hyper_ps):
     """
-    Gives a list of trajectories for a given list of samples from an RL environment.
-    The TD(0) estimator is used for this computation.
-    A sample consists of state, action distribution, action, reward, remaining time.
-    A trajectory consists of state, action distribution, action, return, remaining time.
+    Gives a list of TD estimates for a given list of samples from an RL environment.
+    The TD(λ) estimator is used for this computation.
 
-    :param samples: The samples to be used to compute their corresponding trajectories.
-    :param epoch: The epoch the agent is currently in.
-    :param critic: The state-value estimator.
+    :param replay_buffers: The replay buffers filled by exploring the RL environment.
+    Includes: states, rewards, "final state?"s.
+    :param state_values: The currently estimated state values.
     :param hyper_ps: The hyper-parameters to be used.
 
-    :return: The trajectories.
+    :return: The TD estimates.
     """
 
     states, rewards, dones = replay_buffers

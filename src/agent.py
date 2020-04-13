@@ -1,12 +1,12 @@
 import random
 from collections import deque
 
-import torch
 import numpy as np
+import torch
 
 from utilities.debug import DebugType
-from utilities.utils import t, device, critic_inputs, mc_trajectories, nan_in_model, dict_with_default, \
-    td_values
+from utilities.utils import t, nan_in_model, dict_with_default, \
+    td_values, mc_values
 
 
 class AWRAgent:
@@ -88,6 +88,9 @@ class AWRAgent:
                     replay_buffers=(states, actions, rewards, dones)
                 )
 
+            if len(states) < replay_fill_threshold * max_buffer_size:
+                continue
+
             dq_states = states
             states = np.array(states)
             dq_actions = actions
@@ -95,36 +98,34 @@ class AWRAgent:
             dq_rewards = rewards
             rewards = np.array(rewards)
 
-            if len(states) >= replay_fill_threshold * max_buffer_size:
-                # training the critic
-                avg_loss = 0.
-                tds = td_values((states, rewards, dones), critic, hyper_ps)
-                for _ in range(critic_steps):
-                    indices = random.sample(range(len(states)), batch_size)
-                    ins = t(states[indices])
-                    tars = t(tds[indices]) / return_norm
+            # training the critic
+            avg_loss = 0.
+            state_values = np.array(critic.evaluate(t(states)).squeeze(1).cpu())
+            tds = td_values((states, rewards, dones), state_values, hyper_ps)
+            for _ in range(critic_steps):
+                indices = random.sample(range(len(states)), batch_size)
+                ins = t(states[indices])
+                tars = t(tds[indices]) / return_norm
 
-                    outs = critic(ins)
-                    loss = critic.backward(outs, tars)
-                    avg_loss += loss
-                avg_loss /= critic_steps
-                print(f"average critic loss: {avg_loss}")
+                outs = critic(ins)
+                loss = critic.backward(outs.squeeze(1), tars)
+                avg_loss += loss
+            avg_loss /= critic_steps
+            print(f"average critic loss: {avg_loss}")
 
-                if nan_in_model(critic):
-                    print("NaN values in critic\nstopping training")
-                    break
+            if nan_in_model(critic):
+                print("NaN values in critic\nstopping training")
+                break
 
-                writer.add_scalar('critic_loss', avg_loss, epoch)
+            writer.add_scalar('critic_loss', avg_loss, epoch)
 
-                if avg_loss <= critic_threshold:
-                    critic_suffices_count += 1
-                else:
-                    critic_suffices_count = 0
-
-                if critic_suffices_count >= critic_suffices_required:
-                    critic_suffices = True
+            if avg_loss <= critic_threshold:
+                critic_suffices_count += 1
             else:
-                continue
+                critic_suffices_count = 0
+
+            if critic_suffices_count >= critic_suffices_required:
+                critic_suffices = True
 
             if critic_suffices:
                 # training the actor
@@ -165,10 +166,6 @@ class AWRAgent:
 
             epoch += 1
 
-            states = dq_states
-            actions = dq_actions
-            rewards = dq_rewards
-
             if critic_suffices and epoch % validation_epoch_mod == 0:
                 AWRAgent.compute_validation_return(
                     actor,
@@ -179,6 +176,10 @@ class AWRAgent:
                     epoch,
                     writer
                 )
+
+            states = dq_states
+            actions = dq_actions
+            rewards = dq_rewards
 
         return actor, critic
 
@@ -193,9 +194,16 @@ class AWRAgent:
     def validation_return(actor, env, hyper_ps, debug_type, iterations):
         sample_return = 0.
         for _ in range(iterations):
-            samples = AWRAgent.sample_from_env(actor, env, debug_type != DebugType.NONE, exploration=False)
-            mc_trajs = mc_trajectories(samples, hyper_ps)
-            sample_return += torch.mean(t([tr.reward for tr in mc_trajs]))
+            s, a, r, d = [], [], [], []
+            AWRAgent.sample_from_env(
+                actor,
+                env,
+                debug_type != DebugType.NONE,
+                exploration=False,
+                replay_buffers=(s, a, r, d)
+            )
+            mcs = mc_values(r, hyper_ps)
+            sample_return += np.mean(mcs)
 
         sample_return /= iterations
         return sample_return
@@ -231,4 +239,4 @@ class AWRAgent:
     @staticmethod
     def test(models, environment, hyper_ps, debug_type):
         actor, _ = models
-        return AWRAgent.validation_return(actor, environment, hyper_ps, debug_type is not DebugType.NONE, 1)
+        return AWRAgent.validation_return(actor, environment, hyper_ps, debug_type is not DebugType.NONE, hyper_ps['test_iterations'])

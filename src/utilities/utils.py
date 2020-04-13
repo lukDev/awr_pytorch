@@ -11,7 +11,7 @@ def t(v, dtype=None, device=device, requires_grad=False):
     return torch.tensor(v, device=device, dtype=dtype, requires_grad=requires_grad)
 
 
-def mc_trajectories(samples, hyper_ps):
+def mc_values(rewards, hyper_ps):
     """
     Gives a list of trajectories for a given list of samples from an RL environment.
     The MC estimator is used for this computation.
@@ -25,20 +25,20 @@ def mc_trajectories(samples, hyper_ps):
     :return: The trajectories.
     """
 
-    trajectories = []
-
+    mcs = np.zeros(shape=(len(rewards),))
     discount_factor = hyper_ps['discount_factor']
-    for i, sample in enumerate(samples):
-        ret = sample.reward
+
+    for i, reward in enumerate(rewards):
+        ret = reward
         gamma = 1.
 
-        for j in range(i + 1, len(samples)):
+        for j in range(i + 1, len(rewards)):
             gamma *= discount_factor
-            ret += gamma * samples[j].reward
+            ret += gamma * rewards[j]
 
-        trajectories.append(copy.deepcopy(sample).with_reward_(ret))
+        mcs[i] = ret
 
-    return trajectories
+    return mcs
 
 
 def td_values(replay_buffers, state_values, hyper_ps):

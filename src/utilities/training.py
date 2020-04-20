@@ -1,14 +1,14 @@
-import torch
-import json
 import datetime
+import json
 import os
 
+import numpy as np
+import torch
 from gym import Space
-from gym.spaces import Box
 from tensorboardX import SummaryWriter
 
 from utilities.debug import DebugType
-from utilities.utils import device, t, nan_in_model, xavier_init
+from utilities.utils import device, nan_in_model, xavier_init
 
 
 class Training:
@@ -79,15 +79,14 @@ class Training:
             return
 
         print("testing")
-        rewards = t([])
+        rewards = []
         for _ in range(test_iterations):  # expected reward estimated with average
-            rews = agent.test(models, environment, hyper_ps, debug_type)
-            rews = rews.unsqueeze(0)
-            rewards = torch.cat((rewards, rews))
-        rewards = rewards.mean(0)
+            rew = agent.test(models, environment, hyper_ps, debug_type)
+            rewards.append(rew)
+        reward = np.mean(np.array(rewards))
 
         if not save:
-            print(f"Average reward: {rewards}")
+            print(f"Average reward: {reward}")
         else:
             # saving the hyper-parameters
             parameter_text = json.dumps(hyper_ps)
@@ -105,7 +104,7 @@ class Training:
             # saving the results
             result_text = "Results\n===\n"
             result_text += f"Testing was conducted {test_iterations} times to obtain an estimate of the expected return.\n\n\n"
-            result_text += f"\nAverage return\n---\n{rewards}"
+            result_text += f"\nAverage return\n---\n{reward}"
 
             results_file = open(dir_path + "results.md", "w")
             results_file.write(result_text)

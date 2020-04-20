@@ -40,7 +40,7 @@ hyper_ps = {
 }
 
 # configuring the environment
-environment = gym.make('Pendulum-v0')
+environment = gym.make('HandManipulatePen-v0')
 # environment._max_episode_steps = 600
 
 # setting up the training components

@@ -6,7 +6,7 @@ import torch
 
 from utilities.debug import DebugType
 from utilities.utils import t, nan_in_model, dict_with_default, \
-    td_values, mc_values
+    td_values, mc_values, obs_to_state
 
 
 class AWRAgent:
@@ -208,7 +208,8 @@ class AWRAgent:
     @staticmethod
     def sample_from_env(actor_model, env, debug, exploration, replay_buffers):
         states, actions, rewards, dones = replay_buffers
-        state = t(env.reset()).float()
+        obs = env.reset()
+        state = obs_to_state(obs)
         done = False
 
         if debug:
@@ -228,7 +229,7 @@ class AWRAgent:
             rewards.append(reward)
             dones.append(done)
 
-            state = t(res[0]).float()
+            state = obs_to_state(res[0])
 
             if debug:
                 env.render()

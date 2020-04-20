@@ -3,6 +3,8 @@ import json
 import datetime
 import os
 
+from gym import Space
+from gym.spaces import Box
 from tensorboardX import SummaryWriter
 
 from utilities.debug import DebugType
@@ -49,7 +51,13 @@ class Training:
         test_iterations = hyper_ps['test_iterations']
 
         # extend the hyper-parameters to include environment information
-        hyper_ps['state_dim'] = environment.observation_space.shape[0]
+        if type(environment.observation_space) is not Space:  # MuJoCo environment
+            desired_goal_dims = environment.observation_space.spaces['desired_goal'].shape[0]
+            achieved_goal_dims = environment.observation_space.spaces['achieved_goal'].shape[0]
+            observation_dims = environment.observation_space.spaces['observation'].shape[0]
+            hyper_ps['state_dim'] = desired_goal_dims + achieved_goal_dims + observation_dims
+        else:
+            hyper_ps['state_dim'] = environment.observation_space.shape[0]
         hyper_ps['action_dim'] = environment.action_space.shape[0]
 
         # passing the hyper-parameters to the models

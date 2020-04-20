@@ -25,7 +25,7 @@ hyper_ps = {
     'c_momentum': .9,
     'a_learning_rate': 5e-5,
     'a_momentum': .9,
-    'critic_threshold': 50.,
+    'critic_threshold': 1.,
     'critic_suffices_required': 1,
     'critic_steps_start': 500,
     'critic_steps_end': 500,
@@ -35,12 +35,12 @@ hyper_ps = {
     'seed': 123456,
     'replay_fill_threshold': 1.,
     'random_exploration': True,
-    'test_iterations': 15,
+    'test_iterations': 30,
     'validation_epoch_mod': 3,
 }
 
 # configuring the environment
-environment = gym.make('HandManipulatePen-v0')
+environment = gym.make('FetchPush-v1')
 # environment._max_episode_steps = 600
 
 # setting up the training components

@@ -1,5 +1,3 @@
-import copy
-
 import numpy as np
 import torch
 
@@ -142,3 +140,37 @@ def kaiming_init(m):
     if isinstance(m, torch.nn.Linear):
         torch.nn.init.kaiming_normal_(m.weight)
         torch.nn.init.zeros_(m.bias)
+
+
+def obs_to_state(observation):
+    """
+    Converts a given observation into a state tensor.
+    Necessary as a catch-all for MuJoCo environments.
+
+    :param observation: The observation received from the environment.
+
+    :return: The state tensor.
+    """
+
+    if type(observation) is dict:
+        state = state_from_mujoco(observation)
+    else:
+        state = observation
+
+    return t(state).float()
+
+
+def state_from_mujoco(observation):
+    """
+    Converts the observation parts returned by a MuJoCo environment into a single vector of values.
+
+    :param observation: The observation containing the relevant parts.
+
+    :return: A single vector containing all the observation information.
+    """
+
+    ag = observation['achieved_goal']
+    dg = observation['desired_goal']
+    obs = observation['observation']
+
+    return np.concatenate([ag, dg, obs])

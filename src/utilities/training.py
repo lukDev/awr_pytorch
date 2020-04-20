@@ -51,7 +51,7 @@ class Training:
         test_iterations = hyper_ps['test_iterations']
 
         # extend the hyper-parameters to include environment information
-        if type(environment.observation_space) is not Space:  # MuJoCo environment
+        if not issubclass(type(environment.observation_space), Space):  # MuJoCo Robotics environment
             desired_goal_dims = environment.observation_space.spaces['desired_goal'].shape[0]
             achieved_goal_dims = environment.observation_space.spaces['achieved_goal'].shape[0]
             observation_dims = environment.observation_space.spaces['observation'].shape[0]

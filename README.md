@@ -5,6 +5,7 @@ The objective of this implementation is to make it possible for PyTorch users to
 ## Setup
 - make sure you are running Python 3.6.9 or above
 - run `pip3 install -r requirements.txt --no-cache-dir` (the `no-cache-dir`-option is sometimes required to finish the download of `torch`)
+- you can remove `mujoco-py` from the requirements if you do not have a license
 - edit `main.py` to configure your environment and hyper-parameters (cli options are planned)
 - run `pyton3 main.py`
 

@@ -234,7 +234,13 @@ class AWRAgent:
             if debug:
                 env.render()
 
+        # --- for video output, frames need to be recorded in env.render() ---
+        # out = cv2.VideoWriter(f"../trained_models/video{time()}.mp4", cv2.VideoWriter_fourcc(*'DIVX'), 30, (1000, 1000))
+        # for i in frames:
+        #     out.write(i)
+        # out.release()
+
     @staticmethod
     def test(models, environment, hyper_ps, debug_type):
         actor, _ = models
-        return AWRAgent.validation_return(actor, environment, hyper_ps, debug_type is not DebugType.NONE, hyper_ps['test_iterations'])
+        return AWRAgent.validation_return(actor, environment, hyper_ps, debug_type, hyper_ps['test_iterations'])
